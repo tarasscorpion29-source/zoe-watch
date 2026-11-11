@@ -7,6 +7,12 @@ QUEUE = "6.2"
 URL = "https://www.zoe.com.ua/outage/"
 STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_key.txt")  # рядом со скриптом, а не в папке запуска
 EVERY = 300  # секунд между проверками
+import os, re, signal, requests
+from bs4 import BeautifulSoup
+
+QUEUE = "6.2"
+URL = "https://www.zoe.com.ua/outage/"
+STATE = "last_key.txt"  # лежит в репозитории, workflow коммитит его при изменении
 
 
 def parse(text, queue=QUEUE):
@@ -29,30 +35,33 @@ def check():
 
 
 def get_latest():
-    r = requests.get(URL, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+    r = requests.get(URL, timeout=(10, 20), headers={"User-Agent": "Mozilla/5.0"})
     r.raise_for_status()
+    print("сайт ответил:", r.status_code, len(r.text), "байт")
     return parse(BeautifulSoup(r.text, "html.parser").get_text("\n"))
 
 
 def notify(text):
-    r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                      data={"chat_id": CHAT_ID, "text": text}, timeout=20)
+    r = requests.post(f"https://api.telegram.org/bot{os.environ['BOT_TOKEN']}/sendMessage",
+                      data={"chat_id": os.environ["CHAT_ID"], "text": text}, timeout=20)
     if not r.ok:
-        raise RuntimeError(r.text)  # Telegram пишет причину ошибки в тексте ответа
+        raise RuntimeError(r.text)
+
+
+def _timeout(*_):
+    raise TimeoutError("сайт слишком долго отвечает")
 
 
 if __name__ == "__main__":
     check()
-    while True:
-        try:
-            header, line = get_latest()
-            key = f"{header}|{line}"
-            last = open(STATE, encoding="utf-8").read() if os.path.exists(STATE) else None
-            if key != last:
-                title = "✅ Скрипт запущен. Сейчас" if last is None else f"⚡ Новый график, очередь {QUEUE}"
-                notify(f"{title}\n{header}\n{QUEUE}: {line}")
-                # состояние пишем только после успешной отправки, иначе будет повтор
-                open(STATE, "w", encoding="utf-8").write(key)
-        except Exception as e:
-            print("error:", e)
-        time.sleep(EVERY)
+    signal.signal(signal.SIGALRM, _timeout)
+    signal.alarm(90)  # общий предел на весь запуск: requests сам не ограничивает долгую "капельную" загрузку
+    header, line = get_latest()
+    key = f"{header}|{line}"
+    last = open(STATE, encoding="utf-8").read() if os.path.exists(STATE) else None
+    if key != last:
+        title = "✅ Скрипт запущен. Сейчас" if last is None else f"⚡ Новый график, очередь {QUEUE}"
+        notify(f"{title}\n{header}\n{QUEUE}: {line}")
+        # пишем только после успешной отправки, иначе при сбое будет повтор
+        open(STATE, "w", encoding="utf-8").write(key)
+ 
