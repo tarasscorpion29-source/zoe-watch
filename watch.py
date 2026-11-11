@@ -1,12 +1,3 @@
-import os, re, time, requests
-from bs4 import BeautifulSoup
-
-BOT_TOKEN = "9054593061:AAEH63VVrFlbWLNUTe6STuwGNqfwRsvmYNw"
-CHAT_ID = "8308673733"
-QUEUE = "6.2"
-URL = "https://www.zoe.com.ua/outage/"
-STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_key.txt")  # рядом со скриптом, а не в папке запуска
-EVERY = 300  # секунд между проверками
 import os, re, signal, requests
 from bs4 import BeautifulSoup
 
@@ -64,4 +55,4 @@ if __name__ == "__main__":
         notify(f"{title}\n{header}\n{QUEUE}: {line}")
         # пишем только после успешной отправки, иначе при сбое будет повтор
         open(STATE, "w", encoding="utf-8").write(key)
- 
+
